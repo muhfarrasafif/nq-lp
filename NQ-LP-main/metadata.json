@@ -1,0 +1,8 @@
+{
+  "name": "Nailsqueen Landing Page",
+  "description": "A luxury nail salon landing page with service display and contact form.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
