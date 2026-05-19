@@ -21,15 +21,6 @@ import {
   Globe
 } from 'lucide-react';
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
-import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
-import produk1 from '../asset/produk1.png';
-import produk2 from '../asset/produk2.png';
-import produk3 from '../asset/produk3.png';
-import produk4 from '../asset/produk4.png';
-import produk5 from '../asset/produk5.png';
-
-GlobalWorkerOptions.workerSrc = pdfWorker;
 
 const TRANSLATIONS = {
   ID: {
@@ -226,6 +217,12 @@ export default function App() {
       void (async () => {
         setIsCatalogLoading(true);
         try {
+          const [{ getDocument, GlobalWorkerOptions }, workerModule] = await Promise.all([
+            import('pdfjs-dist'),
+            import('pdfjs-dist/build/pdf.worker.min.mjs?url')
+          ]);
+          GlobalWorkerOptions.workerSrc = workerModule.default;
+
           const loadingTask = getDocument('/catalog/nailsqueen-catalog.pdf.pdf');
           const pdf = await loadingTask.promise;
           const pages: string[] = [];
@@ -619,15 +616,15 @@ export default function App() {
             viewport={{ once: true, margin: "-100px" }}
           >
             {[
-              { img: produk1, id: 0 },
-              { img: produk2, id: 1 },
-              { img: produk3, id: 2 },
-              { img: produk4, id: 3 },
-              { img: produk5, id: 4 }
+              { img: '/products/produk1.webp', id: 0 },
+              { img: '/products/produk2.webp', id: 1 },
+              { img: '/products/produk3.webp', id: 2 },
+              { img: '/products/produk4.webp', id: 3 },
+              { img: '/products/produk5.webp', id: 4 }
             ].map((item, idx) => (
               <motion.div key={idx} variants={fadeIn} className="bg-white rounded-2xl sm:rounded-[1.25rem] overflow-hidden shadow-sm hover:shadow-md transition-shadow group flex flex-col h-full border border-black/5">
                 <div className="aspect-[4/3] overflow-hidden bg-brand-light/50 p-3 sm:p-4 pb-0">
-                  <img src={item.img} alt={t.services.items[item.id].title} loading="lazy" className="w-full h-full object-cover object-center rounded-t-xl sm:rounded-t-2xl group-hover:scale-[1.03] transition-transform duration-500" />
+                  <img src={item.img} alt={t.services.items[item.id].title} loading="lazy" decoding="async" className="w-full h-full object-cover object-center rounded-t-xl sm:rounded-t-2xl group-hover:scale-[1.03] transition-transform duration-500" />
                 </div>
                 <div className="p-4 sm:p-5 text-center flex flex-col flex-grow justify-center">
                   <h3 className="font-semibold text-brand-dark mb-1.5 sm:mb-2 text-base">{t.services.items[item.id].title}</h3>
