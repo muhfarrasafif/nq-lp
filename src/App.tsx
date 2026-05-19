@@ -21,6 +21,15 @@ import {
   Globe
 } from 'lucide-react';
 import { useEffect, useState, type ChangeEvent, type FormEvent } from 'react';
+import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist';
+import pdfWorker from 'pdfjs-dist/build/pdf.worker.min.mjs?url';
+import produk1 from '../asset/produk1.png';
+import produk2 from '../asset/produk2.png';
+import produk3 from '../asset/produk3.png';
+import produk4 from '../asset/produk4.png';
+import produk5 from '../asset/produk5.png';
+
+GlobalWorkerOptions.workerSrc = pdfWorker;
 
 const TRANSLATIONS = {
   ID: {
@@ -36,7 +45,8 @@ const TRANSLATIONS = {
       { title: "Kualitas Profesional", desc: "Layanan berkualitas tinggi & terpercaya" },
       { title: "Aman & Higienis", desc: "Aman digunakan dengan standar tinggi" },
       { title: "Inovasi Berkelanjutan", desc: "Selalu berinovasi mengikuti tren" },
-      { title: "Dukungan Ahli", desc: "Tim profesional siap membantu Anda" }
+      { title: "Dukungan Ahli", desc: "Tim profesional siap membantu Anda" },
+      { title: "Dipercaya Profesional", desc: "Dipercaya ribuan salon & nail artist" }
     ],
     services: {
       title: "Layanan Kami",
@@ -103,7 +113,8 @@ const TRANSLATIONS = {
       { title: "Professional Quality", desc: "High quality & trusted services" },
       { title: "Safe & Hygienic", desc: "Safe to use with high standards" },
       { title: "Continuous Innovation", desc: "Always innovating with trends" },
-      { title: "Expert Support", desc: "Professional team ready to help" }
+      { title: "Expert Support", desc: "Professional team ready to help" },
+      { title: "Trusted by Professionals", desc: "Trusted by thousands of salons and nail artists" }
     ],
     services: {
       title: "Our Service",
@@ -166,10 +177,15 @@ export default function App() {
   const today = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
   const currentTime = `${String(currentDate.getHours()).padStart(2, '0')}:${String(currentDate.getMinutes()).padStart(2, '0')}`;
   const [isMenuOpen, setIsMenuOpen] = useState(false);
-  const [lang, setLang] = useState<Language>('ID');
+  const [lang, setLang] = useState<Language>('ENG');
   const [activeSlide, setActiveSlide] = useState(0);
   const [activeAwardSlide, setActiveAwardSlide] = useState(0);
   const [isBookingOpen, setIsBookingOpen] = useState(false);
+  const [isCatalogOpen, setIsCatalogOpen] = useState(false);
+  const [catalogPages, setCatalogPages] = useState<string[]>([]);
+  const [catalogPage, setCatalogPage] = useState(1);
+  const [isCatalogLoading, setIsCatalogLoading] = useState(false);
+  const [isCatalogSpread, setIsCatalogSpread] = useState(false);
   const [bookingForm, setBookingForm] = useState({
     name: '',
     phone: '',
@@ -200,6 +216,57 @@ export default function App() {
     return () => window.clearInterval(intervalId);
   }, []);
 
+  useEffect(() => {
+    if (!isCatalogOpen) return;
+
+    const originalOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+
+    if (catalogPages.length === 0) {
+      void (async () => {
+        setIsCatalogLoading(true);
+        try {
+          const loadingTask = getDocument('/catalog/nailsqueen-catalog.pdf.pdf');
+          const pdf = await loadingTask.promise;
+          const pages: string[] = [];
+
+          for (let i = 1; i <= pdf.numPages; i += 1) {
+            const page = await pdf.getPage(i);
+            const viewport = page.getViewport({ scale: 1.45 });
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            if (!context) continue;
+            canvas.width = Math.floor(viewport.width);
+            canvas.height = Math.floor(viewport.height);
+
+            await page.render({ canvas, canvasContext: context, viewport }).promise;
+            pages.push(canvas.toDataURL('image/jpeg', 0.92));
+          }
+
+          setCatalogPages(pages);
+        } catch {
+          setCatalogPages([]);
+        } finally {
+          setIsCatalogLoading(false);
+        }
+      })();
+    }
+
+    return () => {
+      document.body.style.overflow = originalOverflow;
+    };
+  }, [isCatalogOpen, catalogPages.length]);
+
+  useEffect(() => {
+    if (!isCatalogOpen) return;
+
+    const media = window.matchMedia('(min-width: 900px)');
+    const apply = () => setIsCatalogSpread(media.matches);
+    apply();
+    media.addEventListener('change', apply);
+    return () => media.removeEventListener('change', apply);
+  }, [isCatalogOpen]);
+
   const t = TRANSLATIONS[lang];
   const bookingText = {
     title: lang === 'ID' ? 'Booking Schedule' : 'Booking Schedule',
@@ -210,6 +277,25 @@ export default function App() {
     notes: lang === 'ID' ? 'Catatan tambahan (opsional)' : 'Additional notes (optional)',
     send: lang === 'ID' ? 'Kirim ke WhatsApp' : 'Send to WhatsApp'
   };
+  const catalogText = {
+    title: lang === 'ID' ? 'Katalog Layanan' : 'Service Catalog',
+    loading: lang === 'ID' ? 'Menyiapkan katalog premium...' : 'Preparing premium catalog...',
+    prev: lang === 'ID' ? 'Sebelumnya' : 'Previous',
+    next: lang === 'ID' ? 'Berikutnya' : 'Next',
+    close: lang === 'ID' ? 'Tutup katalog' : 'Close catalog'
+  };
+
+  const totalCatalogPages = catalogPages.length;
+  const rightPage = isCatalogSpread ? Math.min(catalogPage + 1, totalCatalogPages) : catalogPage;
+  const displayLabel = totalCatalogPages > 0
+    ? isCatalogSpread
+      ? `${catalogPage}-${rightPage} / ${totalCatalogPages}`
+      : `${catalogPage} / ${totalCatalogPages}`
+    : '0 / 0';
+
+  const jumpSize = isCatalogSpread ? 2 : 1;
+  const handleCatalogPrev = () => setCatalogPage((prev) => Math.max(1, prev - jumpSize));
+  const handleCatalogNext = () => setCatalogPage((prev) => Math.min(totalCatalogPages, prev + jumpSize));
   const why5th = lang === 'ID'
     ? { title: 'Harga Kompetitif', desc: 'Kualitas terbaik dengan harga yang bersaing' }
     : { title: 'Competitive Price', desc: 'Best quality with competitive pricing' };
@@ -270,7 +356,7 @@ export default function App() {
   return (
     <div className="min-h-screen flex flex-col font-sans overflow-x-hidden">
       {/* Top Banner */}
-      <div className="bg-brand-dark text-[#C49A6C] text-[11px] sm:text-sm py-1.5 sm:py-2 px-3 sm:px-4 text-center flex items-center justify-center gap-1.5 sm:gap-2 flex-wrap leading-relaxed">
+      <div className="bg-brand-dark text-[#C49A6C] text-[11px] sm:text-sm py-1.5 sm:py-2 px-4 sm:px-6 lg:px-8 text-center flex items-center justify-center gap-1.5 sm:gap-2 flex-wrap leading-relaxed">
         <Star size={14} className="hidden sm:block" />
         <span>{t.topBanner}</span>
         <Star size={14} className="hidden sm:block" />
@@ -278,7 +364,7 @@ export default function App() {
 
       {/* Navigation */}
       <header className="fixed top-0 left-0 right-0 z-50 bg-brand-light/95 backdrop-blur-md border-b border-brand-dark/10">
-        <div className="container mx-auto px-4 lg:px-8 py-2.5 sm:py-4 flex justify-between items-center">
+        <div className="container mx-auto px-4 sm:px-6 lg:px-8 py-2.5 sm:py-4 flex justify-between items-center">
           <div className="flex items-center gap-2 bg-brand-light rounded-md px-1 py-0.5">
             <img
               src="/logo-nq.jpeg"
@@ -295,6 +381,20 @@ export default function App() {
             <div className="relative group cursor-pointer flex items-center gap-1">
               <a href="#services" className="hover:text-brand-accent transition-colors">{t.nav.service}</a>
               <ChevronDown size={14} />
+              <div className="absolute left-0 top-full pt-3 opacity-0 invisible group-hover:opacity-100 group-hover:visible transition-all">
+                <div className="min-w-[180px] rounded-xl border border-[#dbc8b6] bg-[#fff7ef] shadow-[0_12px_30px_rgba(44,26,18,0.15)] p-2">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCatalogPage(1);
+                      setIsCatalogOpen(true);
+                    }}
+                    className="w-full text-left px-3 py-2 rounded-lg text-sm text-[#4b2f25] hover:bg-[#f4e4d5] transition-colors"
+                  >
+                    Lihat Katalog
+                  </button>
+                </div>
+              </div>
             </div>
             <a href="#why" className="hover:text-brand-accent transition-colors">{t.nav.why}</a>
             <a href="#awards" className="hover:text-brand-accent transition-colors">{t.nav.awards}</a>
@@ -321,7 +421,7 @@ export default function App() {
           <motion.div 
             initial={{ opacity: 0, height: 0 }}
             animate={{ opacity: 1, height: 'auto' }}
-            className="lg:hidden bg-brand-light border-t border-brand-dark/10 px-4 py-4 flex flex-col gap-4 shadow-xl absolute top-full w-full left-0 origin-top"
+            className="lg:hidden bg-brand-light border-t border-brand-dark/10 px-4 sm:px-6 py-4 flex flex-col gap-4 shadow-xl absolute top-full w-full left-0 origin-top"
           >
             <a href="#home" onClick={() => setIsMenuOpen(false)} className="font-medium text-brand-dark block p-2 hover:bg-brand-dark/5 rounded-lg">{t.nav.home}</a>
             <a href="#about" onClick={() => setIsMenuOpen(false)} className="font-medium text-brand-dark block p-2 hover:bg-brand-dark/5 rounded-lg">{t.nav.about}</a>
@@ -344,9 +444,9 @@ export default function App() {
       {/* Hero Section */}
       <section id="home" className="relative py-0 px-0 scroll-mt-24">
         <div className="container mx-auto">
-          <div className="relative overflow-hidden bg-[#f3e8dc] rounded-b-[1.25rem] sm:rounded-b-[1.5rem] lg:rounded-none">
+          <div className="relative overflow-hidden bg-[#f3e8dc] rounded-b-[1rem] sm:rounded-b-[1.5rem] lg:rounded-none mx-2 sm:mx-0">
             <div className="absolute inset-y-0 left-[41%] hidden lg:block w-24 bg-gradient-to-r from-[#f3e8dc] via-[#f3e8dc]/75 to-transparent z-20" />
-            <div className="container mx-auto flex flex-col lg:flex-row items-center gap-6 sm:gap-8 lg:gap-0 p-0 sm:p-8 lg:p-0 mt-2 sm:mt-5 lg:mt-6">
+            <div className="container mx-auto flex flex-col lg:flex-row items-center gap-5 sm:gap-8 lg:gap-0 px-0 sm:px-6 lg:px-0 py-0 sm:py-6 lg:py-0 mt-2 sm:mt-5 lg:mt-6">
               <motion.div
                 className="hidden lg:block w-full lg:w-[41%] z-30 text-center lg:text-left lg:pl-10 xl:pl-14 lg:py-10"
                 initial="hidden" animate="visible" variants={fadeIn}
@@ -365,11 +465,15 @@ export default function App() {
                   Nailsqueen menyediakan produk dan perawatan kuku terbaik dengan standar profesional untuk hasil yang aman, higienis, dan memuaskan.
                 </p>
                 <div className="flex flex-col sm:flex-row items-center justify-center lg:justify-start gap-2.5 sm:gap-4 w-full sm:w-auto">
-                  <button className="hidden sm:flex w-full sm:w-auto bg-[#6b3221] text-white px-6 py-3 rounded-xl items-center justify-center gap-2 hover:bg-[#7d3d2a] transition-colors font-medium text-sm">
+                  <button
+                    type="button"
+                    onClick={() => setIsBookingOpen(true)}
+                    className="hidden sm:flex w-full sm:w-auto bg-[#6b3221] text-white px-6 py-3 rounded-xl items-center justify-center gap-2 hover:bg-[#7d3d2a] transition-colors font-medium text-sm"
+                  >
                     <Calendar size={18} />
                     {t.btn.bookApp}
                   </button>
-                  <button className="hidden sm:flex w-full sm:w-auto bg-[#f7efe6]/70 border border-[#b48a73] text-[#4b2f25] px-6 py-3 rounded-xl items-center justify-center gap-2 hover:bg-[#fcf7f2] transition-colors font-medium text-sm">
+                  <button className="hidden w-full sm:w-auto bg-[#f7efe6]/70 border border-[#b48a73] text-[#4b2f25] px-6 py-3 rounded-xl items-center justify-center gap-2 hover:bg-[#fcf7f2] transition-colors font-medium text-sm">
                     <MessageCircle size={18} />
                     {t.btn.chat}
                   </button>
@@ -386,17 +490,17 @@ export default function App() {
                 animate={{ opacity: 1, scale: 1 }}
                 transition={{ duration: 0.8 }}
               >
-                <div className="sm:hidden relative overflow-hidden aspect-[4/5] bg-[#f2e8dd] min-h-[320px]">
+                <div className="sm:hidden relative overflow-hidden aspect-[4/5] bg-[#f2e8dd] min-h-[300px]">
                   <img
                     src="/home3.jpeg"
                     alt="Nailsqueen studio interior"
-                    className="absolute inset-0 w-full h-full object-cover object-[56%_center]"
+                    className="absolute inset-0 w-full h-full object-cover object-[58%_center]"
                     fetchPriority="high"
                   />
                   <div className="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t from-[#f3e8dc] via-[#f3e8dc]/55 to-transparent" />
                 </div>
 
-                <div className="hidden sm:block relative overflow-hidden rounded-[1rem] lg:rounded-none aspect-[16/10] lg:aspect-[16/9] bg-[#f2e8dd] min-h-[420px] lg:min-h-0">
+                <div className="hidden sm:block relative overflow-hidden rounded-[1rem] lg:rounded-none aspect-[16/10] lg:aspect-[16/9] bg-[#f2e8dd] min-h-[360px] md:min-h-[420px] lg:min-h-0">
                   {heroSlides.map((slide, idx) => (
                     <img
                       key={slide.src}
@@ -410,7 +514,7 @@ export default function App() {
               </motion.div>
 
               <motion.div
-                className="w-full px-4 pt-3 pb-2 sm:hidden"
+                className="w-full px-4 pb-3 pt-3 sm:hidden"
                 initial="hidden"
                 animate="visible"
                 variants={fadeIn}
@@ -418,7 +522,7 @@ export default function App() {
                 <p className="uppercase tracking-wider text-[11px] font-semibold text-[#7a665a] mb-3">
                   {t.hero.subtitle}
                 </p>
-                <h1 className="text-[3rem] font-serif text-[#2d1a16] leading-[0.95] mb-3 tracking-tight">
+                <h1 className="text-[2.3rem] sm:text-[2.8rem] font-serif text-[#2d1a16] leading-[0.98] mb-3 tracking-tight">
                   Empowering Your
                   <br />
                   Nail Business
@@ -429,11 +533,11 @@ export default function App() {
                   Nailsqueen menyediakan produk dan perawatan kuku terbaik dengan standar profesional untuk hasil yang aman, higienis, dan memuaskan.
                 </p>
                 <div className="space-y-2.5">
-                  <button className="w-full bg-[#6b3221] text-white px-6 py-3 rounded-2xl flex items-center justify-center gap-2 font-medium text-sm">
+                  <button className="hidden w-full bg-[#6b3221] text-white px-6 py-3 rounded-2xl items-center justify-center gap-2 font-medium text-sm">
                     <Calendar size={18} />
                     {t.btn.bookApp}
                   </button>
-                  <button className="w-full bg-[#f7efe6]/70 border border-[#b48a73] text-[#4b2f25] px-6 py-3 rounded-2xl flex items-center justify-center gap-2 font-medium text-sm">
+                  <button className="hidden w-full bg-[#f7efe6]/70 border border-[#b48a73] text-[#4b2f25] px-6 py-3 rounded-2xl items-center justify-center gap-2 font-medium text-sm">
                     <MessageCircle size={18} />
                     {t.btn.chat}
                   </button>
@@ -444,45 +548,45 @@ export default function App() {
 
           <motion.div
             id="about"
-            className="hidden sm:grid bg-[#f8f2ea] rounded-2xl sm:rounded-[1.2rem] border border-[#e5d8c8] p-4 sm:p-5 lg:p-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5 sm:gap-4 lg:gap-0 -mt-3 sm:-mt-6 lg:-mt-8 mx-3 sm:mx-8 lg:mx-10 relative z-20"
+            className="hidden sm:grid bg-[#f8f2ea] rounded-2xl sm:rounded-[1.2rem] border border-[#e5d8c8] px-4 py-4 sm:px-5 sm:py-5 lg:px-6 lg:py-6 grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 lg:gap-0 -mt-2 sm:-mt-5 lg:-mt-7 mx-4 sm:mx-6 lg:mx-8 xl:mx-10 relative z-20 shadow-[0_10px_28px_rgba(55,35,25,0.08)]"
             initial={{ opacity: 0, y: 24 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
           >
             {[
-              { icon: Crown, title: 'Professional Quality', desc: 'Produk berkualitas tinggi & terpercaya' },
-              { icon: ShieldCheck, title: 'Safe & Hygienic', desc: 'Aman digunakan dengan standar kebersihan tinggi' },
-              { icon: Lightbulb, title: 'Continuous Innovation', desc: 'Selalu berinovasi mengikuti tren & kebutuhan' },
-              { icon: Users, title: 'Expert Support', desc: 'Tim profesional siap membantu Anda' },
-              { icon: Star, title: 'Trusted by Professionals', desc: 'Dipercaya oleh ribuan salon & nail artist' }
-            ].map((feature, idx) => (
-              <div key={idx} className={`flex items-start gap-3 sm:flex-col sm:items-start lg:items-center text-left lg:text-center px-2 sm:px-3 lg:px-5 py-1 sm:py-0 ${idx > 0 ? 'lg:border-l lg:border-[#e5d5c4]' : ''}`}>
-                <feature.icon size={18} className="text-[#b57b56] mb-2" strokeWidth={1.8} />
+              Crown,
+              ShieldCheck,
+              Lightbulb,
+              Users,
+              Star
+            ].map((Icon, idx) => (
+              <div key={idx} className={`flex items-start gap-3 sm:flex-col sm:items-start lg:items-center text-left lg:text-center px-2 sm:px-3 lg:px-4 xl:px-5 py-1 sm:py-2 lg:py-0 md:min-h-[126px] ${idx > 0 ? 'lg:border-l lg:border-[#e5d5c4]' : ''} ${idx === 4 ? 'sm:col-span-2 lg:col-span-1 sm:max-w-[420px] sm:mx-auto lg:max-w-none' : ''}`}>
+                <Icon size={18} className="text-[#b57b56] mb-2" strokeWidth={1.8} />
                 <div>
-                  <h3 className="font-semibold text-[#36211a] mb-1 text-xs sm:text-sm leading-tight">{feature.title}</h3>
-                  <p className="text-[11px] sm:text-xs text-[#5c453b]/90 leading-relaxed">{feature.desc}</p>
+                  <h3 className="font-semibold text-[#36211a] mb-1 text-xs sm:text-sm leading-tight">{t.features[idx].title}</h3>
+                  <p className="text-[11px] sm:text-xs text-[#5c453b]/90 leading-relaxed">{t.features[idx].desc}</p>
                 </div>
               </div>
             ))}
           </motion.div>
 
           <motion.div
-            className="sm:hidden bg-[#f8f2ea] border border-[#e5d8c8] rounded-2xl p-4 mx-3 mt-3"
+            className="sm:hidden bg-[#f8f2ea] border border-[#e5d8c8] rounded-2xl p-4 mx-4 mt-3"
             initial={{ opacity: 0, y: 24 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
           >
             <div className="grid grid-cols-2 gap-2.5">
               {[
-                { icon: Crown, title: 'Professional\nQuality', desc: 'Produk berkualitas tinggi & terpercaya' },
-                { icon: ShieldCheck, title: 'Safe &\nHygienic', desc: 'Aman digunakan dengan standar kebersihan tinggi' },
-                { icon: Lightbulb, title: 'Continuous\nInnovation', desc: 'Selalu berinovasi mengikuti tren & kebutuhan' },
-                { icon: Users, title: 'Expert\nSupport', desc: 'Tim profesional siap membantu Anda' }
-              ].map((feature, idx) => (
+                Crown,
+                ShieldCheck,
+                Lightbulb,
+                Users
+              ].map((Icon, idx) => (
                 <div key={idx} className="rounded-xl bg-white/55 border border-[#e8dac8] px-2.5 py-2.5 text-center min-h-[106px] flex flex-col items-center justify-start">
-                  <feature.icon size={16} className="text-[#b57b56] mb-1.5" strokeWidth={1.8} />
-                  <h3 className="text-[11px] font-semibold text-[#36211a] leading-[1.15] whitespace-pre-line mb-1">{feature.title}</h3>
-                  <p className="text-[9px] text-[#5c453b]/90 leading-[1.3] line-clamp-3">{feature.desc}</p>
+                  <Icon size={16} className="text-[#b57b56] mb-1.5" strokeWidth={1.8} />
+                  <h3 className="text-[11px] font-semibold text-[#36211a] leading-[1.15] mb-1">{t.features[idx].title}</h3>
+                  <p className="text-[9px] text-[#5c453b]/90 leading-[1.3] line-clamp-3">{t.features[idx].desc}</p>
                 </div>
               ))}
             </div>
@@ -491,31 +595,35 @@ export default function App() {
       </section>
 
       {/* Our Service Section */}
-      <section id="services" className="pt-4 sm:pt-8 lg:pt-10 pb-10 sm:pb-14 lg:pb-18 bg-brand-light px-4 sm:px-6 lg:px-8 scroll-mt-24">
+      <section id="services" className="pt-6 sm:pt-8 lg:pt-10 pb-10 sm:pb-14 lg:pb-18 bg-brand-light px-4 sm:px-6 lg:px-8 scroll-mt-24">
         <div className="container mx-auto">
-          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-10 sm:mb-12 gap-4">
+          <div className="flex flex-col sm:flex-row justify-between items-start sm:items-end mb-8 sm:mb-12 gap-4">
             <div>
               <h2 className="text-3xl sm:text-4xl font-serif text-brand-dark mb-3 sm:mb-4">{t.services.title}</h2>
               <p className="text-brand-dark/70 max-w-xl text-sm sm:text-base leading-relaxed">{t.services.desc}</p>
             </div>
-            <button className="hidden sm:block border border-brand-dark text-brand-dark px-6 py-2.5 rounded-full hover:bg-brand-dark hover:text-white transition-colors text-sm font-medium whitespace-nowrap">
+            <button
+              type="button"
+              onClick={() => setIsCatalogOpen(true)}
+              className="hidden sm:block border border-brand-dark text-brand-dark px-6 py-2.5 rounded-full hover:bg-brand-dark hover:text-white transition-colors text-sm font-medium whitespace-nowrap"
+            >
               {t.btn.viewAllService}
             </button>
           </div>
 
           <motion.div 
-            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-6"
+            className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 sm:gap-5 lg:gap-6"
             variants={staggerContainer}
             initial="hidden"
             whileInView="visible"
             viewport={{ once: true, margin: "-100px" }}
           >
             {[
-              { img: "https://placehold.co/800x600/F6ECE0/6B4B3F?text=Gel+Manicure", id: 0 },
-              { img: "https://placehold.co/800x600/F3E7DA/6B4B3F?text=Builder+Gel", id: 1 },
-              { img: "https://placehold.co/800x600/F9F0E6/6B4B3F?text=Nail+Art+Custom", id: 2 },
-              { img: "https://placehold.co/800x600/F4EADF/6B4B3F?text=Spa+%26+Care", id: 3 },
-              { img: "https://placehold.co/800x600/F7EEE5/6B4B3F?text=Consultation", id: 4 }
+              { img: produk1, id: 0 },
+              { img: produk2, id: 1 },
+              { img: produk3, id: 2 },
+              { img: produk4, id: 3 },
+              { img: produk5, id: 4 }
             ].map((item, idx) => (
               <motion.div key={idx} variants={fadeIn} className="bg-white rounded-2xl sm:rounded-[1.25rem] overflow-hidden shadow-sm hover:shadow-md transition-shadow group flex flex-col h-full border border-black/5">
                 <div className="aspect-[4/3] overflow-hidden bg-brand-light/50 p-3 sm:p-4 pb-0">
@@ -528,14 +636,21 @@ export default function App() {
               </motion.div>
             ))}
           </motion.div>
-          <button className="sm:hidden w-full mt-8 border border-brand-dark text-brand-dark px-6 py-3.5 rounded-xl hover:bg-brand-dark hover:text-white transition-colors font-medium">
+          <button
+            type="button"
+            onClick={() => {
+              setCatalogPage(1);
+              setIsCatalogOpen(true);
+            }}
+            className="sm:hidden w-full mt-8 border border-brand-dark text-brand-dark px-6 py-3.5 rounded-xl hover:bg-brand-dark hover:text-white transition-colors font-medium"
+          >
             {t.btn.viewAllService}
           </button>
         </div>
       </section>
 
       {/* Why Choose Us */}
-      <section id="why" className="py-10 sm:py-14 lg:py-16 px-4 lg:px-8 bg-[radial-gradient(circle_at_top,#5a321f_0%,#2a170f_38%,#1b0f0b_100%)] text-[#f5ebde] scroll-mt-24">
+      <section id="why" className="py-10 sm:py-14 lg:py-16 px-4 sm:px-6 lg:px-8 bg-[radial-gradient(circle_at_top,#5a321f_0%,#2a170f_38%,#1b0f0b_100%)] text-[#f5ebde] scroll-mt-24">
         <div className="container mx-auto">
           <motion.h2
             className="hidden sm:block text-3xl sm:text-4xl font-serif text-center mb-8 sm:mb-10"
@@ -545,7 +660,7 @@ export default function App() {
           </motion.h2>
 
           <motion.div
-            className="sm:hidden max-w-sm mx-auto rounded-xl border border-[#8e633f]/40 bg-[linear-gradient(145deg,#3c2418_0%,#25160f_55%,#1b100b_100%)] px-4 py-5"
+            className="sm:hidden max-w-sm mx-auto rounded-xl border border-[#8e633f]/40 bg-[linear-gradient(145deg,#3c2418_0%,#25160f_55%,#1b100b_100%)] px-4 py-5 mb-5"
             initial={{ opacity: 0, y: 20 }}
             whileInView={{ opacity: 1, y: 0 }}
             viewport={{ once: true }}
@@ -589,8 +704,8 @@ export default function App() {
             ))}
           </motion.div>
 
-          <div className="hidden sm:grid grid-cols-1 lg:grid-cols-3 gap-4 sm:gap-5 max-w-6xl mx-auto">
-            <motion.div id="awards" variants={fadeIn} className="bg-[#f8f2ea] rounded-2xl p-4 sm:p-6 text-[#2f2119] border border-[#eadbc9] scroll-mt-24">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-5 max-w-6xl mx-auto items-stretch">
+            <motion.div id="awards" variants={fadeIn} className="bg-[#f8f2ea] rounded-2xl p-4 sm:p-5 lg:p-6 text-[#2f2119] border border-[#eadbc9] scroll-mt-24 flex flex-col">
               <div className="flex items-center justify-center gap-2 mb-2"><Award size={22} className="text-[#8b5b39]" /><h3 className="text-2xl font-serif text-center">{t.why.awards.title}</h3></div>
               <p className="text-sm text-[#5f4c40] mb-4 text-center">Penghargaan yang kami raih adalah bukti komitmen terhadap kualitas terbaik.</p>
               <div className="relative rounded-xl overflow-hidden mb-4 aspect-[16/10] bg-[#ead7c4]">
@@ -619,10 +734,10 @@ export default function App() {
                   ))}
                 </div>
               </div>
-              <button className="w-full border border-[#c39b79] text-[#6d4834] py-2.5 rounded-full text-sm font-medium hover:bg-[#f0e4d8] transition-colors">View All Awards</button>
+              <button className="w-full mt-auto border border-[#c39b79] text-[#6d4834] py-2.5 rounded-full text-sm font-medium hover:bg-[#f0e4d8] transition-colors">View All Awards</button>
             </motion.div>
 
-            <motion.div id="news" variants={fadeIn} className="bg-[#f8f2ea] rounded-2xl p-4 sm:p-6 text-[#2f2119] border border-[#eadbc9] scroll-mt-24">
+            <motion.div id="news" variants={fadeIn} className="bg-[#f8f2ea] rounded-2xl p-4 sm:p-5 lg:p-6 text-[#2f2119] border border-[#eadbc9] scroll-mt-24 flex flex-col">
               <div className="flex items-center justify-center gap-2 mb-2"><Newspaper size={22} className="text-[#8b5b39]" /><h3 className="text-2xl font-serif text-center">{t.why.news.title}</h3></div>
               <p className="text-sm text-[#5f4c40] mb-4 text-center">Discover the latest updates, achievements, and insights from Nailsqueen.</p>
               <div className="flex flex-col gap-2.5 mb-4">
@@ -637,30 +752,51 @@ export default function App() {
                   </div>
                 ))}
               </div>
-              <button className="w-full border border-[#c39b79] text-[#6d4834] py-2.5 rounded-full text-sm font-medium hover:bg-[#f0e4d8] transition-colors">View All News</button>
+              <button className="w-full mt-auto border border-[#c39b79] text-[#6d4834] py-2.5 rounded-full text-sm font-medium hover:bg-[#f0e4d8] transition-colors">View All News</button>
             </motion.div>
 
-            <motion.div variants={fadeIn} className="bg-[#f8f2ea] rounded-2xl p-4 sm:p-6 text-[#2f2119] border border-[#eadbc9]">
+            <motion.div variants={fadeIn} className="bg-[#f8f2ea] rounded-2xl p-4 sm:p-5 lg:p-6 text-[#2f2119] border border-[#eadbc9] flex flex-col md:col-span-2 lg:col-span-1">
               <div className="flex items-center justify-center gap-2 mb-2"><Gift size={22} className="text-[#8b5b39]" /><h3 className="text-2xl font-serif text-center">{t.why.events.title}</h3></div>
               <p className="text-sm text-[#5f4c40] mb-4 text-center">Jangan lewatkan event seru dan promo spesial dari Nailsqueen!</p>
-              <div className="relative rounded-xl overflow-hidden mb-4 aspect-[16/10] bg-gradient-to-r from-[#4a281c] to-[#2e1a13] p-5 text-[#f5dfbf]">
-                <p className="tracking-[0.2em] text-[11px] uppercase text-[#d9b790]">{t.why.events.promoLabel}</p>
-                <p className="mt-2 text-lg">{lang === 'ID' ? 'Diskon Hingga' : 'Disc. Up To'}</p>
-                <p className="text-6xl font-serif leading-none">20%</p>
-                <p className="text-sm text-[#e8cfb2]">{lang === 'ID' ? 'Untuk Layanan Terpilih' : 'For Selected Items'}</p>
-                <img src="https://images.unsplash.com/photo-1604654894610-df63bc536371?auto=format&fit=crop&q=80&w=500" alt="Promo" className="absolute bottom-0 right-0 w-28 sm:w-36 lg:w-40 max-w-[46%] h-auto object-contain opacity-80" loading="lazy" />
+              <div className="relative rounded-xl overflow-hidden mb-4 aspect-[16/10] md:aspect-[21/9] lg:aspect-[16/10] bg-[radial-gradient(circle_at_18%_20%,#7f4a31_0%,#4c291d_42%,#2b1712_100%)]">
+                <div className="absolute -top-8 -right-8 w-36 h-36 rounded-full bg-[#d8aa7a]/20 blur-2xl" />
+                <div className="absolute -bottom-10 -left-8 w-44 h-44 rounded-full bg-[#f7d8b0]/10 blur-2xl" />
+                <div className="absolute inset-0 bg-[linear-gradient(115deg,rgba(255,255,255,0.06)_0%,rgba(255,255,255,0)_42%)]" />
+
+                <div className="relative h-full px-4 sm:px-5 md:px-6 py-4 sm:py-5 flex flex-col justify-between text-[#f8e6cd]">
+                  <div>
+                    <p className="inline-flex items-center rounded-full border border-[#eac39a]/45 bg-[#2b1812]/35 px-2.5 py-1 text-[10px] sm:text-[11px] tracking-[0.18em] uppercase">
+                      {lang === 'ID' ? 'Promo Spesial' : 'Special Offer'}
+                    </p>
+                    <p className="mt-2 text-sm sm:text-base text-[#f3dcc0]">
+                      {lang === 'ID' ? 'Diskon Treatment Pilihan' : 'Discount on Selected Treatments'}
+                    </p>
+                  </div>
+
+                  <div className="flex items-end justify-between gap-3">
+                    <div>
+                      <p className="text-[2.5rem] sm:text-[3rem] lg:text-[3.3rem] font-serif leading-none">20%</p>
+                      <p className="text-[11px] sm:text-xs text-[#ebd0b1] mt-1">
+                        {lang === 'ID' ? 'Khusus Member Baru' : 'For New Members'}
+                      </p>
+                    </div>
+                    <p className="text-right text-xs sm:text-sm font-semibold tracking-wide text-[#f6e2c8]">
+                      NAILSQUEEN
+                    </p>
+                  </div>
+                </div>
               </div>
-              <button className="w-full border border-[#c39b79] text-[#6d4834] py-2.5 rounded-full text-sm font-medium hover:bg-[#f0e4d8] transition-colors">View All Events</button>
+              <button className="w-full mt-auto border border-[#c39b79] text-[#6d4834] py-2.5 rounded-full text-sm font-medium hover:bg-[#f0e4d8] transition-colors">View All Events</button>
             </motion.div>
           </div>
         </div>
       </section>
 
       {/* CTA Box */}
-      <section className="py-12 sm:py-16 bg-brand-light px-4 lg:px-8">
+      <section className="py-10 sm:py-14 lg:py-16 bg-brand-light px-4 sm:px-6 lg:px-8">
         <div className="container mx-auto">
           <motion.div 
-            className="bg-[#9b7b65] rounded-[2rem] p-6 flex flex-col lg:flex-row items-center justify-between gap-6 sm:gap-8 lg:p-12 text-white relative overflow-hidden"
+            className="bg-[#9b7b65] rounded-[1.5rem] sm:rounded-[2rem] p-5 sm:p-6 flex flex-col lg:flex-row items-center justify-between gap-5 sm:gap-8 lg:p-12 text-white relative overflow-hidden"
             initial={{ opacity: 0, scale: 0.98 }} whileInView={{ opacity: 1, scale: 1 }} viewport={{ once: true }}
           >
             {/* Background decorative element */}
@@ -688,6 +824,92 @@ export default function App() {
           </motion.div>
         </div>
       </section>
+
+      {isCatalogOpen && (
+        <div className="fixed inset-0 z-[80] bg-[#1f1410]/90 backdrop-blur-sm p-3 sm:p-5 lg:p-8">
+          <div className="mx-auto h-full max-w-7xl rounded-2xl sm:rounded-3xl border border-[#c79a70]/30 bg-[radial-gradient(circle_at_top,#4f2f24_0%,#2a1813_48%,#1b110e_100%)] shadow-[0_24px_80px_rgba(0,0,0,0.55)] flex flex-col overflow-hidden">
+            <div className="px-4 sm:px-6 py-4 border-b border-white/10 flex items-center justify-between">
+              <div>
+                <p className="text-[10px] sm:text-xs tracking-[0.2em] uppercase text-[#d7b28d]">Nailsqueen</p>
+                <h3 className="text-lg sm:text-2xl font-serif text-[#f4e5d4] leading-tight">{catalogText.title}</h3>
+              </div>
+              <button
+                type="button"
+                onClick={() => setIsCatalogOpen(false)}
+                className="h-10 w-10 rounded-full border border-[#c79a70]/40 text-[#f4e5d4] flex items-center justify-center hover:bg-white/10 transition-colors"
+                aria-label={catalogText.close}
+              >
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className="flex-1 min-h-0 px-3 sm:px-5 lg:px-6 py-4 sm:py-5 flex flex-col gap-4">
+              <div className="flex-1 min-h-0 rounded-2xl border border-[#d9b693]/20 bg-[#efe2d1]/95 p-2 sm:p-3 lg:p-4 overflow-hidden">
+                {isCatalogLoading && (
+                  <div className="h-full flex items-center justify-center text-[#5a3a2d] text-sm sm:text-base">{catalogText.loading}</div>
+                )}
+
+                {!isCatalogLoading && totalCatalogPages > 0 && (
+                  <div className="h-full grid grid-cols-1 lg:grid-cols-2 gap-2 sm:gap-4">
+                    <div className="h-full rounded-xl overflow-hidden bg-[#e5d1bb] border border-[#cfb190]/40 shadow-inner">
+                      <img src={catalogPages[catalogPage - 1]} alt={`Catalog page ${catalogPage}`} className="w-full h-full object-contain" />
+                    </div>
+                    {isCatalogSpread && rightPage > catalogPage ? (
+                      <div className="h-full rounded-xl overflow-hidden bg-[#e5d1bb] border border-[#cfb190]/40 shadow-inner">
+                        <img src={catalogPages[rightPage - 1]} alt={`Catalog page ${rightPage}`} className="w-full h-full object-contain" />
+                      </div>
+                    ) : (
+                      <div className="hidden lg:block h-full rounded-xl bg-[linear-gradient(140deg,#ead8c4_0%,#ddc3a8_45%,#e9d5bf_100%)] border border-[#cfb190]/40" />
+                    )}
+                  </div>
+                )}
+              </div>
+
+              <div className="flex items-center justify-between gap-2 sm:gap-3">
+                <button
+                  type="button"
+                  onClick={handleCatalogPrev}
+                  disabled={catalogPage <= 1}
+                  className="px-4 sm:px-5 py-2.5 rounded-full border border-[#c79a70]/50 text-[#f6e7d7] text-xs sm:text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white/10 transition-colors"
+                >
+                  {catalogText.prev}
+                </button>
+                <p className="text-[#eed9c2] text-xs sm:text-sm tracking-wide">{displayLabel}</p>
+                <button
+                  type="button"
+                  onClick={handleCatalogNext}
+                  disabled={catalogPage >= totalCatalogPages}
+                  className="px-4 sm:px-5 py-2.5 rounded-full border border-[#c79a70]/50 text-[#f6e7d7] text-xs sm:text-sm font-medium disabled:opacity-40 disabled:cursor-not-allowed hover:bg-white/10 transition-colors"
+                >
+                  {catalogText.next}
+                </button>
+              </div>
+
+              {!isCatalogLoading && totalCatalogPages > 0 && (
+                <div className="shrink-0 overflow-x-auto pb-1">
+                  <div className="flex gap-2 min-w-max">
+                    {catalogPages.map((src, idx) => {
+                      const pageNo = idx + 1;
+                      const isActive = pageNo === catalogPage || pageNo === rightPage;
+                      return (
+                        <button
+                          key={pageNo}
+                          type="button"
+                          onClick={() => setCatalogPage(isCatalogSpread ? (pageNo % 2 === 0 ? pageNo - 1 : pageNo) : pageNo)}
+                          className={`relative h-16 sm:h-20 w-12 sm:w-14 rounded-lg overflow-hidden border ${isActive ? 'border-[#6b3221] ring-2 ring-[#c79a70]/70' : 'border-[#cdb79f]/60'} bg-[#ead7c2]`}
+                        >
+                          <img src={src} alt={`Thumbnail page ${pageNo}`} className="w-full h-full object-cover" />
+                          <span className="absolute bottom-1 right-1 text-[10px] px-1 py-0.5 rounded bg-black/55 text-white">{pageNo}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {isBookingOpen && (
         <div className="fixed inset-0 z-[70] bg-black/50 backdrop-blur-sm flex items-center justify-center p-4">
@@ -730,7 +952,7 @@ export default function App() {
       )}
 
       {/* Footer */}
-      <footer id="contact" className="bg-brand-dark text-white mt-auto pt-12 sm:pt-14 lg:pt-16 pb-8 sm:pb-10 px-4 sm:px-6 lg:px-8 border-t border-white/10">
+      <footer id="contact" className="bg-brand-dark text-white mt-auto pt-10 sm:pt-14 lg:pt-16 pb-8 sm:pb-10 px-4 sm:px-6 lg:px-8 border-t border-white/10">
         <div className="container mx-auto grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-8 sm:gap-10 lg:gap-12 mb-12 sm:mb-16 lg:mb-20">
           
           <div className="sm:col-span-2 lg:col-span-1 text-center sm:text-left">
@@ -761,7 +983,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="hidden sm:block text-center sm:text-left">
+          <div className="hidden lg:block text-center lg:text-left">
             <h4 className="font-semibold mb-4 sm:mb-6">{t.footer.quick}</h4>
             <div className="flex flex-col gap-2.5 sm:gap-3 text-white/70 text-sm items-center sm:items-start">
               <a href="#home" className="hover:text-white transition-colors w-fit">{t.nav.home}</a>
@@ -774,7 +996,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="hidden sm:block text-center sm:text-left">
+          <div className="hidden lg:block text-center lg:text-left">
             <h4 className="font-semibold mb-4 sm:mb-6">{t.footer.service}</h4>
             <div className="flex flex-col gap-2.5 sm:gap-3 text-white/70 text-sm items-center sm:items-start">
               <a href="#" className="hover:text-white transition-colors w-fit">FAQ</a>
@@ -785,7 +1007,7 @@ export default function App() {
             </div>
           </div>
 
-          <div className="hidden sm:block text-center sm:text-left">
+          <div className="hidden lg:block text-center lg:text-left">
             <h4 className="font-semibold mb-4 sm:mb-6">{t.footer.contact}</h4>
             <div className="flex flex-col gap-3.5 sm:gap-4 text-white/70 text-sm mb-0">
               <div className="flex gap-3 items-start justify-center sm:justify-start">
